@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${PROJECT_NAME}:latest
+    container_name: ${PROJECT_NAME}
+    restart: unless-stopped
+    networks:
+      - web
+    mem_limit: 256m
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.${PROJECT_NAME}.rule=Host(`${SUBDOMAIN}.neomac.io`)"
+      - "traefik.http.routers.${PROJECT_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.${PROJECT_NAME}.tls=true"
+      - "traefik.http.routers.${PROJECT_NAME}.tls.certresolver=le"
+      - "traefik.http.services.${PROJECT_NAME}.loadbalancer.server.port=${APP_PORT:-80}"
+      - "traefik.http.routers.${PROJECT_NAME}-http.rule=Host(`${SUBDOMAIN}.neomac.io`)"
+      - "traefik.http.routers.${PROJECT_NAME}-http.entrypoints=web"
+      - "traefik.http.routers.${PROJECT_NAME}-http.middlewares=${PROJECT_NAME}-https"
+      - "traefik.http.middlewares.${PROJECT_NAME}-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.${PROJECT_NAME}-https.redirectscheme.permanent=true"
+
+networks:
+  web:
+    external: true
