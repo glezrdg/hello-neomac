@@ -18,13 +18,16 @@ jobs:
       APP_PORT:     ${{ vars.APP_PORT || '3000' }}
     steps:
       - name: Sync repo to /opt/apps
+        env:
+          REPO_URL: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
         run: |
           set -euo pipefail
           cd /opt/apps
           if [ ! -d "${PROJECT_NAME}" ]; then
-            git clone "git@github.com:${{ github.repository }}.git" "${PROJECT_NAME}"
+            git clone "${REPO_URL}" "${PROJECT_NAME}"
           fi
           cd "${PROJECT_NAME}"
+          git remote set-url origin "${REPO_URL}"
           git fetch origin main
           git reset --hard origin/main
 
