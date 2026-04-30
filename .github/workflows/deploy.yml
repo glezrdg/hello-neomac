@@ -11,37 +11,39 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, neomac-vps]
+    env:
+      PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+      SUBDOMAIN:    ${{ vars.SUBDOMAIN }}
+      APP_PORT:     ${{ vars.APP_PORT || '3000' }}
     steps:
-      - name: SSH and deploy
-        uses: appleboy/ssh-action@v1
+      - name: Sync repo to /opt/apps
+        run: |
+          set -euo pipefail
+          cd /opt/apps
+          if [ ! -d "${PROJECT_NAME}" ]; then
+            git clone "git@github.com:${{ github.repository }}.git" "${PROJECT_NAME}"
+          fi
+          cd "${PROJECT_NAME}"
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Write .env.production (if provided)
         env:
-          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
-          SUBDOMAIN:    ${{ vars.SUBDOMAIN }}
-          APP_PORT:     ${{ vars.APP_PORT || '3000' }}
-        with:
-          host: 46.202.89.41
-          username: deploy
-          key: ${{ secrets.VPS_DEPLOY_KEY }}
-          envs: PROJECT_NAME,SUBDOMAIN,APP_PORT
-          script: |
-            set -euo pipefail
-            cd /opt/apps
-            if [ ! -d "${PROJECT_NAME}" ]; then
-              git clone git@github.com:${{ github.repository }}.git "${PROJECT_NAME}"
-            fi
-            cd "${PROJECT_NAME}"
-            git fetch origin main
-            git reset --hard origin/main
+          ENV_BLOB: ${{ secrets.ENV_PRODUCTION }}
+        run: |
+          set -euo pipefail
+          cd "/opt/apps/${PROJECT_NAME}"
+          if [ -n "${ENV_BLOB:-}" ]; then
+            printf '%s\n' "${ENV_BLOB}" > .env.production
+            chmod 600 .env.production
+          else
+            : > .env.production
+          fi
 
-            # Optional: write .env.production from a GH secret blob if present
-            if [ -n "${{ secrets.ENV_PRODUCTION }}" ]; then
-              echo "${{ secrets.ENV_PRODUCTION }}" > .env.production
-              chmod 600 .env.production
-            else
-              touch .env.production
-            fi
-
-            export PROJECT_NAME SUBDOMAIN APP_PORT
-            docker compose -f docker-compose.prod.yml up -d --build
-            docker image prune -f
+      - name: Build & start container
+        run: |
+          set -euo pipefail
+          cd "/opt/apps/${PROJECT_NAME}"
+          docker compose -f docker-compose.prod.yml up -d --build
+          docker image prune -f
